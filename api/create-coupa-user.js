@@ -1,3 +1,6 @@
+// api/create-coupa-user.js
+// Serverless function for Coupa user creation (token kept on server)
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
@@ -18,7 +21,13 @@ export default async function handler(req, res) {
   try {
     const url = "https://ey-in-demo.coupacloud.com/api/users";
 
-    const payload = { user: { login, email, firstname, lastname } };
+    // ✅ Send root-level fields exactly like your successful Postman call
+    const payload = {
+      login,
+      email,
+      firstname,
+      lastname
+    };
 
     const response = await fetch(url, {
       method: "POST",
@@ -43,10 +52,8 @@ export default async function handler(req, res) {
     }
 
     return res.status(201).json(data);
+
   } catch (err) {
-    return res.status(500).json({
-      error: "Server error",
-      details: String(err)
-    });
+    return res.status(500).json({ error: "Server error", details: String(err) });
   }
 }
