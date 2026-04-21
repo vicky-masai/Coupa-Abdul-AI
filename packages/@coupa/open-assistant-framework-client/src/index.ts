@@ -30,7 +30,15 @@ export function initOAFInstance(config: any): OafApp {
     setSize: noop,
     moveToLocation: noop,
     getPageContext: async () => ({}),
-    navigateToPath: noop,
+    navigateToPath: async (path: string) => {
+      console.log('[OAF STUB] navigateToPath called with:', path);
+      if (typeof window !== 'undefined') {
+        const host = 'https://ey-in-demo.coupacloud.com';
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        window.open(`${host}${normalizedPath}`, '_blank');
+      }
+      return { status: 'success', message: `Stub: Navigating to ${path}` };
+    },
     enterprise: {
       openEasyForm: noop,
       launchUiButtonClickProcess: noop,

@@ -113,11 +113,11 @@ export default function OafNavigation() {
   };
 
   const quickPaths = [
-    "/requisition_headers",     // your chosen route
-    "/purchase-orders",         // boilerplate example
-    "/suppliers/new",           // boilerplate example
-    "/invoices?status=pending", // boilerplate example
-    "/purchase_orders",         // underscore variant
+    "/requisition_headers",
+    "/order_headers/1",
+    "/purchase_orders",
+    "/suppliers/new",
+    "/invoices?status=pending",
   ];
 
   return (

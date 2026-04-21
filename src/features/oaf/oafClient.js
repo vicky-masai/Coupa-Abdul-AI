@@ -131,15 +131,27 @@ const normalizePath = (path) => {
 
 export const navigatePath = async (path) => {
   const app = await getOafApp();
-  if (!app) return failure("navigatePath");
-
   const normalized = normalizePath(path);
   if (!normalized) {
     return { status: "failure", message: "Navigation path is empty" };
   }
 
-  await app.navigateToPath(normalized);
-  return { status: "success" };
+  if (!app) {
+    // Local fallback for testing outside Coupa
+    const host = config.coupahost.includes("localhost")
+      ? "https://ey-in-demo.coupacloud.com"
+      : `https://${config.coupahost}`;
+    const fullUrl = `${host}${normalized}`;
+    console.log("[OAF FALLBACK] Navigating to:", fullUrl);
+    window.open(fullUrl, "_blank");
+    return {
+      status: "success",
+      message: `Opened ${normalized} in new tab (Standalone Fallback)`,
+    };
+  }
+
+  const resp = await app.navigateToPath(normalized);
+  return resp || { status: "success" };
 };
 
 // --------------------------------------------------
