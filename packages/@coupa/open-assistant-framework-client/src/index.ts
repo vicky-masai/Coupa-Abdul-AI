@@ -35,7 +35,7 @@ export function initOAFInstance(config: any): OafApp {
       if (typeof window !== 'undefined') {
         const host = 'https://ey-in-demo.coupacloud.com';
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-        window.open(`${host}${normalizedPath}`, '_blank');
+        window.location.href = `${host}${normalizedPath}`;
       }
       return { status: 'success', message: `Stub: Navigating to ${path}` };
     },

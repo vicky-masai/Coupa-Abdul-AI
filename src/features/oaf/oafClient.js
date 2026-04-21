@@ -143,10 +143,10 @@ export const navigatePath = async (path) => {
       : `https://${config.coupahost}`;
     const fullUrl = `${host}${normalized}`;
     console.log("[OAF FALLBACK] Navigating to:", fullUrl);
-    window.open(fullUrl, "_blank");
+    window.location.href = fullUrl;
     return {
       status: "success",
-      message: `Opened ${normalized} in new tab (Standalone Fallback)`,
+      message: `Navigating to ${normalized} (Standalone Fallback)`,
     };
   }
 

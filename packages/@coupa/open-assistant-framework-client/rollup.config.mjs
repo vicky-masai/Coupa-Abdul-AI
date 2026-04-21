@@ -13,10 +13,10 @@ export default {
     nodeResolve({ extensions }),
     commonjs(),
     babel({
-      rootMode: "upward",
       extensions,
       exclude: "node_modules/**",
       babelHelpers: "bundled",
+      presets: ["@babel/preset-typescript"],
     }),
   ],
   output: [
