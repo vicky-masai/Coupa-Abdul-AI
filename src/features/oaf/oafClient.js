@@ -1,155 +1,186 @@
 // oafClient.js
-// This module provides wrapper functions for interacting with the Open Assistant Framework (OAF) API.
-// It initializes the OAF instance and exposes utility functions for window management, navigation, form operations, and event handling.
+// Runtime-safe wrapper for the Open Assistant Framework (OAF)
+// Works in:
+// - Browser / Vercel (standalone, no OAF)
+// - Coupa iframe (OAF injected at runtime)
 
-import { initOAFInstance } from "@coupa/open-assistant-framework-client";
 import config from "./oafConfig";
 
-// Initialize the OAF application instance using configuration.
-export const oafApp = initOAFInstance(config);
+// --------------------------------------------------
+// Internal OAF loader (dynamic, runtime-only)
+// --------------------------------------------------
 
-/**
- * Sets the size of the OAF application window.
- * @param {number} height - Desired window height in pixels.
- * @param {number} width - Desired window width in pixels.
- * @returns {Promise<any>} Resolves when the size is set.
- */
+let oafApp = null;
+let attemptedLoad = false;
+
+async function getOafApp() {
+  if (oafApp || attemptedLoad) return oafApp;
+  attemptedLoad = true;
+
+  try {
+    const module = await import("@coupa/open-assistant-framework-client");
+    const { initOAFInstance } = module;
+    oafApp = initOAFInstance(config);
+  } catch (err) {
+    // Outside Coupa → OAF is unavailable (expected)
+    oafApp = null;
+  }
+
+  return oafApp;
+}
+
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
+
+const failure = (op) => ({
+  status: "failure",
+  message: `OAF is not available (${op}). Open the app inside Coupa.`,
+});
+
+const noopEmitter = {
+  on: () => {},
+  off: () => {},
+  emit: () => {},
+};
+
+// --------------------------------------------------
+// Window & Layout APIs
+// --------------------------------------------------
+
 export const setSize = async (height, width) => {
-  return oafApp.setSize({
-    height,
-    width,
-  });
+  const app = await getOafApp();
+  if (!app) return failure("setSize");
+  await app.setSize({ height, width });
+  return { status: "success" };
 };
 
-/**
- * Moves the OAF application window to a specific location.
- * @param {number} top - Top position in pixels.
- * @param {number} left - Left position in pixels.
- * @param {boolean} resetToDock - Whether to reset to docked position.
- * @returns {Promise<any>} Resolves when the window is moved.
- */
 export const moveAppToLocation = async (top, left, resetToDock) => {
-  return oafApp.moveToLocation({
-    top,
-    left,
-    resetToDock,
-  });
+  const app = await getOafApp();
+  if (!app) return failure("moveToLocation");
+  await app.moveToLocation({ top, left, resetToDock });
+  return { status: "success" };
 };
 
-/**
- * Retrieves the current page context using OAF.
- * @returns {Promise<any>} Resolves with page context data.
- */
-export const getPageContext = async () => oafApp.getPageContext();
-
-/**
- * Moves and resizes the OAF application window.
- * @param {number} top - Top position in pixels.
- * @param {number} left - Left position in pixels.
- * @param {number} height - Window height in pixels.
- * @param {number} width - Window width in pixels.
- * @param {boolean} resetToDock - Whether to reset to docked position.
- * @returns {Promise<any>} Resolves when operation completes.
- */
-export const moveAndResize = async (top, left, height, width, resetToDock) => {
-  return oafApp.moveAndResize({
-    top,
-    left,
-    height,
-    width,
-    resetToDock,
-  });
+export const moveAndResize = async (
+  top,
+  left,
+  height,
+  width,
+  resetToDock
+) => {
+  const app = await getOafApp();
+  if (!app) return failure("moveAndResize");
+  await app.moveAndResize({ top, left, height, width, resetToDock });
+  return { status: "success" };
 };
 
-/**
- * Normalizes a navigation path for Coupa OAF.
- * Ensures relative paths have a leading slash so the parent (Coupa) window can resolve them correctly when the app runs in an iframe.
- * @param {string} path - Raw path from the user (e.g. "requisition_headers" or "/order_headers/1").
- * @returns {string} Normalized path (trimmed, with leading slash if it's a relative path).
- */
-const normalizeNavigatePath = (path) => {
-  const trimmed = (path || "").trim();
-  if (!trimmed) return trimmed;
-  // Already absolute (has protocol or starts with //) or already has leading slash
-  if (/^(https?:|\/\/|\/)/.test(trimmed)) return trimmed;
-  return `/${trimmed}`;
-};
+// --------------------------------------------------
+// Context & Navigation
+// --------------------------------------------------
 
-/**
- * Navigates the user to a specific path using OAF.
- * When the app is embedded in Coupa via iframe, this triggers navigation in the parent (Coupa) window.
- * Paths are normalized (leading slash for relative paths) so Coupa resolves them correctly.
- * @param {string} path - The navigation path (e.g. "/requisition_headers" or "quotes/requests").
- * @returns {Promise<any>} Resolves with OAF response { status, message, ... } when navigation is requested.
- */
-export const navigatePath = async (path) => {
-  const normalizedPath = normalizeNavigatePath(path);
-  if (!normalizedPath) {
+export const getPageContext = async () => {
+  const app = await getOafApp();
+
+  if (!app) {
+    // Fallback so UI can still render layout
     return {
-      status: "failure",
-      message: "Path cannot be empty",
+      status: "success",
+      data: {
+        pageDetails: {
+          viewPortHeight: window.innerHeight,
+          viewPortWidth: window.innerWidth,
+        },
+      },
+      message: "Standalone fallback context",
     };
   }
-  return oafApp.navigateToPath(normalizedPath);
+
+  return app.getPageContext();
 };
 
-/**
- * Opens an EasyForm using the OAF application.
- * @param {string} formId - The ID of the form to open.
- * @returns {Promise<any>} Resolves when the form is opened.
- */
-export const openEasyForm = async (formId) =>
-  oafApp.enterprise.openEasyForm(formId);
+const normalizePath = (path) => {
+  const p = (path || "").trim();
+  if (!p) return "";
+  if (/^(https?:|\/\/|\/)/.test(p)) return p;
+  return `/${p}`;
+};
 
-/**
- * Reads form data using the OAF application.
- * @param {object} readMetaData - Metadata for the form to read.
- * @returns {Promise<any>} Resolves with the form data.
- */
-export const readForm = async (readMetaData) =>
-  oafApp.readForm({ formMetaData: readMetaData });
+export const navigatePath = async (path) => {
+  const app = await getOafApp();
+  if (!app) return failure("navigatePath");
 
-/**
- * Writes data to a form using the OAF application.
- * @param {object} writeData - Data to write to the form.
- * @returns {Promise<any>} Resolves when the data is written.
- */
-export const writeForm = async (writeData) => oafApp.writeForm(writeData);
+  const normalized = normalizePath(path);
+  if (!normalized) {
+    return { status: "failure", message: "Navigation path is empty" };
+  }
 
-/**
- * Subscribes to data location changes using the OAF application.
- * @param {object} subscriptionData - Subscription parameters.
- * @returns {Promise<any>} Resolves when subscription is active.
- */
-export const subscribeToLocation = async (subscriptionData) =>
-  oafApp.listenToDataLocation(subscriptionData);
+  await app.navigateToPath(normalized);
+  return { status: "success" };
+};
 
-/**
- * Subscribes to oaf events using the OAF application.
- * @param {object} eventsSubscriptionData - Subscription parameters.
- * @returns {Promise<any>} Resolves when subscription is active.
- */
-export const subscribeToEvents = async (eventsSubscriptionData) =>
-  oafApp.listenToOafEvents(eventsSubscriptionData);
+// --------------------------------------------------
+// Forms & Enterprise APIs
+// --------------------------------------------------
 
-/**
- * Returns the OAF application's event emitter for subscribing to events.
- * @returns {object} OAF event emitter.
- */
-export const oafEvents = () => oafApp.events;
+export const openEasyForm = async (formId) => {
+  const app = await getOafApp();
+  if (!app || !app.enterprise) return failure("openEasyForm");
 
-/**
- * Retrieves metadata from a form or HTML element using OAF.
- * @param {object} formStructure - The form structure containing formLocation, formId, and optional inputFields.
- * @returns {Promise<any>} Resolves with the metadata.
- */
-export const getElementMeta = async (formStructure) =>
-  oafApp.getElementMeta(formStructure);
+  await app.enterprise.openEasyForm(formId);
+  return { status: "success" };
+};
 
-/**
- * Executes a workflow process by its ID.
- * @param {number} processId - The ID of the workflow process to execute.
- * @returns {Promise<any>} Resolves when the workflow process execution completes.
- */
-export const launchUiButtonClickProcess = async (processId) =>
-  oafApp.enterprise.launchUiButtonClickProcess(processId);
+export const readForm = async (readMetaData) => {
+  const app = await getOafApp();
+  if (!app) return failure("readForm");
+
+  return app.readForm({ formMetaData: readMetaData });
+};
+
+export const writeForm = async (writeData) => {
+  const app = await getOafApp();
+  if (!app) return failure("writeForm");
+
+  return app.writeForm(writeData);
+};
+
+// --------------------------------------------------
+// Subscriptions & Events
+// --------------------------------------------------
+
+export const subscribeToLocation = async (subscriptionData) => {
+  const app = await getOafApp();
+  if (!app) return failure("listenToDataLocation");
+
+  return app.listenToDataLocation(subscriptionData);
+};
+
+export const subscribeToEvents = async (subscriptionData) => {
+  const app = await getOafApp();
+  if (!app) return failure("listenToOafEvents");
+
+  return app.listenToOafEvents(subscriptionData);
+};
+
+export const oafEvents = async () => {
+  const app = await getOafApp();
+  return app?.events || noopEmitter;
+};
+
+export const getElementMeta = async (formStructure) => {
+  const app = await getOafApp();
+  if (!app) return failure("getElementMeta");
+
+  return app.getElementMeta(formStructure);
+};
+
+export const launchUiButtonClickProcess = async (processId) => {
+  const app = await getOafApp();
+  if (!app || !app.enterprise)
+    return failure("launchUiButtonClickProcess");
+
+  await app.enterprise.launchUiButtonClickProcess(processId);
+  return { status: "success" };
+};
+``
