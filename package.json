@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@coupa/open-assistant-framework-client": "file:./packages/@coupa/open-assistant-framework-client",
+    "@github/copilot": "^0.0.422",
     "@tailwindcss/vite": "^4.1.12",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

@@ -1,164 +1,155 @@
-// src/features/oaf/oafClient.js
-// Wrapper functions for interacting with the Open Assistant Framework (OAF) API.
-// Uses initOAFInstance (supported by your SDK build) and logs runtime config to verify IDs/host.
+// oafClient.js
+// This module provides wrapper functions for interacting with the Open Assistant Framework (OAF) API.
+// It initializes the OAF instance and exposes utility functions for window management, navigation, form operations, and event handling.
 
 import { initOAFInstance } from "@coupa/open-assistant-framework-client";
 import config from "./oafConfig";
-import { STATUSES } from "./oafConstants";
 
-// --- safe event emitter for standalone mode ---
-const createNoopEmitter = () => ({
-  on: () => {},
-  off: () => {},
-  emit: () => {},
-});
-
-let oafApp = null;
-try {
-  // IMPORTANT: pass dynamic iframeId & coupahost (read from URL by oafConfig.js)
-  // Add aliases (clientId + host) to satisfy stricter client/host builds.
-  oafApp = initOAFInstance({
-    appId:    config.appId,
-    clientId: config.appId,
-
-    // For binding: use domain-only host, and provide it under both keys.
-    coupahost: config.coupahost, // e.g., "ey-in-demo.coupacloud.com"
-    host:      config.coupahost,
-
-    iframeId:  config.iframeId,
-  });
-
-  // DEBUG: log config & current URL to confirm the iframe id came from the query string
-  console.log("[OAF CONFIG AT RUNTIME]", {
-    appId: config.appId,
-    clientId: config.appId,
-    coupahost: config.coupahost,
-    host: config.coupahost,
-    iframeId: config.iframeId,
-  });
-  console.log("[LOCATION HREF]", window.location.href);
-} catch (e) {
-  console.error("[OAF init error]", e);
-  oafApp = null;
-}
-
-// --- helpers to normalize responses ---
-const failure = (message, rawError) => ({
-  status: STATUSES.ERROR,
-  message,
-  ...(rawError ? { rawError } : {}),
-});
-
-const noOafMsg = (op) =>
-  `OAF is not connected (${op} unavailable in standalone). Open the app from within Coupa.`;
+// Initialize the OAF application instance using configuration.
+export const oafApp = initOAFInstance(config);
 
 /**
- * Safely execute an OAF call. Returns normalized result or a failure object.
+ * Sets the size of the OAF application window.
+ * @param {number} height - Desired window height in pixels.
+ * @param {number} width - Desired window width in pixels.
+ * @returns {Promise<any>} Resolves when the size is set.
  */
-const callOaf = async (factory, opName) => {
-  if (!oafApp) return failure(noOafMsg(opName));
-  try {
-    const resp = await factory();
-    if (resp == null) {
-      // Surface as a clear failure so we can see the host is ignoring it
-      return failure(`No response from OAF for ${opName}`);
-    }
-    return resp;
-  } catch (err) {
-    return failure(`OAF ${opName} failed`, err);
-  }
+export const setSize = async (height, width) => {
+  return oafApp.setSize({
+    height,
+    width,
+  });
 };
 
-// --- utilities ---
-const normalizePath = (p) => {
-  if (!p) return "";
-  // Strip any stray bullet characters / unusual whitespace
-  p = p.replace(/\u2022/g, "").trim();
-  // If a full URL was pasted, strip origin
-  try {
-    const u = new URL(p);
-    p = u.pathname + (u.search || "");
-  } catch {
-    /* not a full URL */
-  }
-  if (!p.startsWith("/")) p = "/" + p;
-  return p.replace(/\/{2,}/g, "/");
+/**
+ * Moves the OAF application window to a specific location.
+ * @param {number} top - Top position in pixels.
+ * @param {number} left - Left position in pixels.
+ * @param {boolean} resetToDock - Whether to reset to docked position.
+ * @returns {Promise<any>} Resolves when the window is moved.
+ */
+export const moveAppToLocation = async (top, left, resetToDock) => {
+  return oafApp.moveToLocation({
+    top,
+    left,
+    resetToDock,
+  });
 };
 
-// ====== BASIC CONTEXT CALLS (prove we are connected) ======
-export const getUserContext = async () =>
-  callOaf(() => oafApp.getUserContext(), "getUserContext");
+/**
+ * Retrieves the current page context using OAF.
+ * @returns {Promise<any>} Resolves with page context data.
+ */
+export const getPageContext = async () => oafApp.getPageContext();
 
-export const getPageContext = async () =>
-  callOaf(() => oafApp.getPageContext(), "getPageContext");
+/**
+ * Moves and resizes the OAF application window.
+ * @param {number} top - Top position in pixels.
+ * @param {number} left - Left position in pixels.
+ * @param {number} height - Window height in pixels.
+ * @param {number} width - Window width in pixels.
+ * @param {boolean} resetToDock - Whether to reset to docked position.
+ * @returns {Promise<any>} Resolves when operation completes.
+ */
+export const moveAndResize = async (top, left, height, width, resetToDock) => {
+  return oafApp.moveAndResize({
+    top,
+    left,
+    height,
+    width,
+    resetToDock,
+  });
+};
 
-// ====== NAVIGATION (dual-signature, resilient) ======
+/**
+ * Normalizes a navigation path for Coupa OAF.
+ * Ensures relative paths have a leading slash so the parent (Coupa) window can resolve them correctly when the app runs in an iframe.
+ * @param {string} path - Raw path from the user (e.g. "requisition_headers" or "/order_headers/1").
+ * @returns {string} Normalized path (trimmed, with leading slash if it's a relative path).
+ */
+const normalizeNavigatePath = (path) => {
+  const trimmed = (path || "").trim();
+  if (!trimmed) return trimmed;
+  // Already absolute (has protocol or starts with //) or already has leading slash
+  if (/^(https?:|\/\/|\/)/.test(trimmed)) return trimmed;
+  return `/${trimmed}`;
+};
+
 /**
  * Navigates the user to a specific path using OAF.
- * Tries the object signature first ({ path }), then falls back to plain string.
+ * When the app is embedded in Coupa via iframe, this triggers navigation in the parent (Coupa) window.
+ * Paths are normalized (leading slash for relative paths) so Coupa resolves them correctly.
+ * @param {string} path - The navigation path (e.g. "/requisition_headers" or "quotes/requests").
+ * @returns {Promise<any>} Resolves with OAF response { status, message, ... } when navigation is requested.
  */
-export const navigatePath = async (path) =>
-  callOaf(async () => {
-    const normalized = normalizePath(path);
-
-    // Try { path } signature first
-    try {
-      const r = await oafApp.navigateToPath({ path: normalized });
-      if (r != null) return r;
-      // Host returned void → try string signature
-      const r2 = await oafApp.navigateToPath(normalized);
-      return r2 ?? { status: "noop", message: "Host returned no body (string signature)" };
-    } catch (eObj) {
-      // Object call failed → try string
-      try {
-        const r2 = await oafApp.navigateToPath(normalized);
-        return r2 ?? { status: "noop", message: "Host returned no body (string signature)" };
-      } catch (eStr) {
-        // Expose both errors so we can see which signature the host rejects
-        throw { objectSignatureError: eObj, stringSignatureError: eStr, sentPath: normalized };
-      }
-    }
-  }, "navigateToPath");
-
-// ====== WINDOW MANAGEMENT (prove permissions) ======
-export const setSize = async (height, width) =>
-  callOaf(() => oafApp.setSize({ height, width }), "setSize");
-
-export const moveAppToLocation = async (top, left, resetToDock) =>
-  callOaf(() => oafApp.moveToLocation({ top, left, resetToDock }), "moveToLocation");
-
-export const moveAndResize = async (top, left, height, width, resetToDock) =>
-  callOaf(() => oafApp.moveAndResize({ top, left, height, width, resetToDock }), "moveAndResize");
-
-// ====== ENTERPRISE / FORMS ======
-export const openEasyForm = async (formId) => {
-  if (!oafApp || !oafApp.enterprise) return failure(noOafMsg("openEasyForm"));
-  return callOaf(() => oafApp.enterprise.openEasyForm(formId), "openEasyForm");
+export const navigatePath = async (path) => {
+  const normalizedPath = normalizeNavigatePath(path);
+  if (!normalizedPath) {
+    return {
+      status: "failure",
+      message: "Path cannot be empty",
+    };
+  }
+  return oafApp.navigateToPath(normalizedPath);
 };
 
+/**
+ * Opens an EasyForm using the OAF application.
+ * @param {string} formId - The ID of the form to open.
+ * @returns {Promise<any>} Resolves when the form is opened.
+ */
+export const openEasyForm = async (formId) =>
+  oafApp.enterprise.openEasyForm(formId);
+
+/**
+ * Reads form data using the OAF application.
+ * @param {object} readMetaData - Metadata for the form to read.
+ * @returns {Promise<any>} Resolves with the form data.
+ */
 export const readForm = async (readMetaData) =>
-  callOaf(() => oafApp.readForm({ formMetaData: readMetaData }), "readForm");
+  oafApp.readForm({ formMetaData: readMetaData });
 
-export const writeForm = async (writeData) =>
-  callOaf(() => oafApp.writeForm(writeData), "writeForm");
+/**
+ * Writes data to a form using the OAF application.
+ * @param {object} writeData - Data to write to the form.
+ * @returns {Promise<any>} Resolves when the data is written.
+ */
+export const writeForm = async (writeData) => oafApp.writeForm(writeData);
 
-// ====== SUBSCRIPTIONS / EVENTS ======
+/**
+ * Subscribes to data location changes using the OAF application.
+ * @param {object} subscriptionData - Subscription parameters.
+ * @returns {Promise<any>} Resolves when subscription is active.
+ */
 export const subscribeToLocation = async (subscriptionData) =>
-  callOaf(() => oafApp.listenToDataLocation(subscriptionData), "listenToDataLocation");
+  oafApp.listenToDataLocation(subscriptionData);
 
+/**
+ * Subscribes to oaf events using the OAF application.
+ * @param {object} eventsSubscriptionData - Subscription parameters.
+ * @returns {Promise<any>} Resolves when subscription is active.
+ */
 export const subscribeToEvents = async (eventsSubscriptionData) =>
-  callOaf(() => oafApp.listenToOafEvents(eventsSubscriptionData), "listenToOafEvents");
+  oafApp.listenToOafEvents(eventsSubscriptionData);
 
-export const oafEvents = () => (oafApp?.events ? oafApp.events : createNoopEmitter());
+/**
+ * Returns the OAF application's event emitter for subscribing to events.
+ * @returns {object} OAF event emitter.
+ */
+export const oafEvents = () => oafApp.events;
 
-// ====== METADATA / PROCESSES ======
+/**
+ * Retrieves metadata from a form or HTML element using OAF.
+ * @param {object} formStructure - The form structure containing formLocation, formId, and optional inputFields.
+ * @returns {Promise<any>} Resolves with the metadata.
+ */
 export const getElementMeta = async (formStructure) =>
-  callOaf(() => oafApp.getElementMeta(formStructure), "getElementMeta");
+  oafApp.getElementMeta(formStructure);
 
-export const launchUiButtonClickProcess = async (processId) => {
-  if (!oafApp || !oafApp.enterprise) return failure(noOafMsg("launchUiButtonClickProcess"));
-  return callOaf(
-    () => oafApp.enterprise.launchUiButtonClickProcess(processId),
-    "launchUiButtonClickProcess"
-  );
-};
+/**
+ * Executes a workflow process by its ID.
+ * @param {number} processId - The ID of the workflow process to execute.
+ * @returns {Promise<any>} Resolves when the workflow process execution completes.
+ */
+export const launchUiButtonClickProcess = async (processId) =>
+  oafApp.enterprise.launchUiButtonClickProcess(processId);
