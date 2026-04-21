@@ -1,28 +1,29 @@
 // oafClient.js
-// Runtime-safe wrapper for the Open Assistant Framework (OAF)
-// Works in:
+// Runtime-safe wrapper for Coupa Open Assistant Framework (OAF)
+// Safe for:
 // - Browser / Vercel (standalone, no OAF)
 // - Coupa iframe (OAF injected at runtime)
 
 import config from "./oafConfig";
 
 // --------------------------------------------------
-// Internal OAF loader (dynamic, runtime-only)
+// Dynamic OAF loader (CRITICAL for Vercel)
 // --------------------------------------------------
 
 let oafApp = null;
-let attemptedLoad = false;
+let loadAttempted = false;
 
 async function getOafApp() {
-  if (oafApp || attemptedLoad) return oafApp;
-  attemptedLoad = true;
+  if (oafApp || loadAttempted) return oafApp;
+  loadAttempted = true;
 
   try {
-    const module = await import("@coupa/open-assistant-framework-client");
-    const { initOAFInstance } = module;
+    const { initOAFInstance } = await import(
+      "@coupa/open-assistant-framework-client"
+    );
     oafApp = initOAFInstance(config);
-  } catch (err) {
-    // Outside Coupa → OAF is unavailable (expected)
+  } catch (_err) {
+    // Expected outside Coupa
     oafApp = null;
   }
 
@@ -51,6 +52,7 @@ const noopEmitter = {
 export const setSize = async (height, width) => {
   const app = await getOafApp();
   if (!app) return failure("setSize");
+
   await app.setSize({ height, width });
   return { status: "success" };
 };
@@ -58,6 +60,7 @@ export const setSize = async (height, width) => {
 export const moveAppToLocation = async (top, left, resetToDock) => {
   const app = await getOafApp();
   if (!app) return failure("moveToLocation");
+
   await app.moveToLocation({ top, left, resetToDock });
   return { status: "success" };
 };
@@ -71,19 +74,20 @@ export const moveAndResize = async (
 ) => {
   const app = await getOafApp();
   if (!app) return failure("moveAndResize");
+
   await app.moveAndResize({ top, left, height, width, resetToDock });
   return { status: "success" };
 };
 
 // --------------------------------------------------
-// Context & Navigation
+// Context APIs
 // --------------------------------------------------
 
 export const getPageContext = async () => {
   const app = await getOafApp();
 
   if (!app) {
-    // Fallback so UI can still render layout
+    // Standalone fallback (browser / Vercel)
     return {
       status: "success",
       data: {
@@ -92,12 +96,31 @@ export const getPageContext = async () => {
           viewPortWidth: window.innerWidth,
         },
       },
-      message: "Standalone fallback context",
+      message: "Standalone fallback page context",
     };
   }
 
   return app.getPageContext();
 };
+
+export const getUserContext = async () => {
+  const app = await getOafApp();
+
+  if (!app) {
+    // Standalone fallback
+    return {
+      status: "success",
+      data: { user: null },
+      message: "Standalone fallback user context",
+    };
+  }
+
+  return app.getUserContext();
+};
+
+// --------------------------------------------------
+// Navigation
+// --------------------------------------------------
 
 const normalizePath = (path) => {
   const p = (path || "").trim();
@@ -183,4 +206,3 @@ export const launchUiButtonClickProcess = async (processId) => {
   await app.enterprise.launchUiButtonClickProcess(processId);
   return { status: "success" };
 };
-``
