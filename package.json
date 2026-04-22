@@ -7,8 +7,7 @@
     "postinstall": "npm run build:client",
     "dev": "vite",
     "build:client": "npm --prefix packages/@coupa/open-assistant-framework-client run build",
-    "prebuild": "npm run build:client",
-    "build": "vite build",
+    "build": "npm run build:client && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "jest"
