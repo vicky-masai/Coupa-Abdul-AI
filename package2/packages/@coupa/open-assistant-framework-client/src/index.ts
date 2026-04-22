@@ -67,33 +67,22 @@ export function initOAFInstance(config: any): OafApp {
         .replace(/\/+$/, '')
         .split('/')[0];
 
-      /** Same browser tab: top frame, then link fallback, then iframe location. */
-      const navigateSameBrowserTab = (url: string): boolean => {
+      /**
+       * Without Coupa's real OAF client, `window.open(url, '_top')` usually does nothing in a
+       * cross-origin iframe but does not throw — so we must not treat it as success.
+       * Reliable stub behavior: navigate THIS frame to the tenant URL (iframe shows Coupa;
+       * the browser address bar may still show the parent page when embedded).
+       */
+      const navigateEmbeddedStub = (url: string): boolean => {
         if (typeof window === 'undefined') return false;
         try {
-          window.open(url, '_top');
-          return true;
+          const topWin = window.top;
+          if (topWin && topWin !== window) {
+            topWin.location.href = url;
+            return true;
+          }
         } catch {
-          /* ignore */
-        }
-        try {
-          const a = document.createElement('a');
-          a.href = url;
-          a.target = '_top';
-          a.rel = 'opener';
-          a.style.display = 'none';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          return true;
-        } catch {
-          /* ignore */
-        }
-        try {
-          window.top!.location.href = url;
-          return true;
-        } catch {
-          /* cross-origin top: fall back to navigating this frame */
+          /* cross-origin: cannot drive parent URL */
         }
         try {
           window.location.assign(url);
@@ -103,14 +92,14 @@ export function initOAFInstance(config: any): OafApp {
         }
       };
 
-      // Stub: approximate official client by loading the tenant URL in the same tab (_top / iframe).
+      // Stub: load tenant URL in this frame (or top if same-origin).
       if (embedded) {
         if (tenantDomain && typeof window !== 'undefined') {
           const url = `https://${tenantDomain}${normalizedPath}`;
-          if (navigateSameBrowserTab(url)) {
+          if (navigateEmbeddedStub(url)) {
             return {
               status: 'success',
-              message: `Navigating ${url} in this tab (stub SDK; Coupa bundle uses host OAF APIs).`,
+              message: `Loading ${url} in this frame (stub). Parent URL only changes if top is same-origin, or use Coupa's OAF client for in-host navigation.`,
             };
           }
         }
