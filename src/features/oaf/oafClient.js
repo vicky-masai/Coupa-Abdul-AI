@@ -161,16 +161,79 @@ const normalizePath = (path) => {
   return `/${p}`;
 };
 
+/** True when this document is inside a Coupa (or any) parent frame. */
+const isEmbeddedInParentFrame = () => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Ask Coupa Core to change the main app route (not the iframe document).
+ * Same postMessage shape as floating iframe resize/getSecret in Coupa docs.
+ * @see https://compass.coupa.com/en-us/products/product-documentation/core-platform/platform-plus/embedded-apps/create-an-iframe
+ */
+const postCoupaParentNavigate = (relativePath) => {
+  const domain = String(config.coupahost || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+  if (!domain) return false;
+
+  const clientId = String(config.appId ?? "").trim();
+  const iframeId = String(config.iframeId ?? "").trim();
+  if (!clientId || !iframeId) {
+    console.warn(
+      "[OAF] Parent navigation needs Client ID (appId) and floating_iframe_id from the iframe URL."
+    );
+    return false;
+  }
+
+  const targetOrigin = `https://${domain}`;
+  const payload = {
+    action: "navigateToPath",
+    client_id: clientId,
+    iframe_id: iframeId,
+    data: { path: relativePath },
+  };
+
+  try {
+    window.parent.postMessage(payload, targetOrigin);
+    return true;
+  } catch (err) {
+    console.warn("[OAF] postMessage to Coupa parent failed:", err);
+    return false;
+  }
+};
+
 export const navigatePath = async (path) => {
-  const app = await getOafApp();
   const normalized = normalizePath(path);
   if (!normalized) {
     return { status: "failure", message: "Navigation path is empty" };
   }
 
+  // Inside Coupa floating iframe: never use window.location here — it only replaces the iframe.
+  // Coupa expects postMessage on window.parent with client_id + iframe_id (see Compass "Create an IFrame").
+  if (isEmbeddedInParentFrame() && config.coupahost) {
+    if (postCoupaParentNavigate(normalized)) {
+      return {
+        status: "success",
+        message: `Requested Coupa parent navigation: ${normalized}`,
+      };
+    }
+    return {
+      status: "failure",
+      message:
+        "Could not request parent navigation. Open the app from Coupa so the URL includes coupahost, floating_iframe_id, and your Client ID matches the iframe app.",
+    };
+  }
+
+  const app = await getOafApp();
+
   if (!app) {
-    // Local fallback for testing outside Coupa
-    const host = config.coupahost.includes("localhost")
+    // Top-level window only: full redirect for local testing without OAF.
+    const host = String(config.coupahost || "").includes("localhost")
       ? "https://ey-in-demo.coupacloud.com"
       : `https://${config.coupahost}`;
     const fullUrl = `${host}${normalized}`;
@@ -178,7 +241,7 @@ export const navigatePath = async (path) => {
     window.location.href = fullUrl;
     return {
       status: "success",
-      message: `Navigating to ${normalized} (Standalone Fallback)`,
+      message: `Navigating to ${normalized} (standalone)`,
     };
   }
 
