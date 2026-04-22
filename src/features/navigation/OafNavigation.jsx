@@ -98,9 +98,15 @@ export default function OafNavigation() {
   };
 
   // --- Navigate button action ---
-  const handleNavigate = async () => {
-    append(`Navigating to: ${input}`);
-    const resp = await oafNavigatePath(input);
+  /** @param {string} [path] — use when firing from quick-path before `input` state has updated */
+  const handleNavigate = async (path) => {
+    const target = (path ?? input).trim();
+    if (!target) {
+      append("Navigate: enter a path first.");
+      return;
+    }
+    append(`Navigating to: ${target}`);
+    const resp = await oafNavigatePath(target);
     append("navigateToPath response:");
     append(JSON.stringify(resp, null, 2));
   };
@@ -156,7 +162,7 @@ export default function OafNavigation() {
               style={styles.testBtn}
               onClick={() => {
                 setInput(p);
-                handleNavigate();
+                void handleNavigate(p);
               }}
             >
               {p}

@@ -10,9 +10,18 @@ const stubEventEmitter = {
 export interface OafApp {
   setSize?: (opts: {height: number; width: number}) => Promise<any>;
   moveToLocation?: (opts: {top: number; left: number; resetToDock?: boolean}) => Promise<any>;
+  moveAndResize?: (opts: {
+    top: number;
+    left: number;
+    height: number;
+    width: number;
+    resetToDock?: boolean;
+  }) => Promise<any>;
   getPageContext?: () => Promise<any>;
   getUserContext?: () => Promise<any>;
   navigateToPath?: (path: string) => Promise<any>;
+  triggerHostEvent?: (data: any) => Promise<any>;
+  performAction?: (data: any) => Promise<any>;
   enterprise?: {
     openEasyForm?: (formId: string) => Promise<any>;
     launchUiButtonClickProcess?: (processId: number) => Promise<any>;
@@ -36,6 +45,9 @@ export function initOAFInstance(config: any): OafApp {
   return {
     setSize: noop,
     moveToLocation: noop,
+    moveAndResize: noop,
+    triggerHostEvent: noop,
+    performAction: noop,
     getPageContext: async () => ({}),
     getUserContext: async () => ({
       status: 'success',
@@ -55,38 +67,50 @@ export function initOAFInstance(config: any): OafApp {
         .replace(/\/+$/, '')
         .split('/')[0];
 
-      const tryOpenInNewTab = (url: string): boolean => {
+      /** Same browser tab: top frame, then link fallback, then iframe location. */
+      const navigateSameBrowserTab = (url: string): boolean => {
         if (typeof window === 'undefined') return false;
         try {
-          const w = window.open(url, '_blank', 'noopener,noreferrer');
-          if (w) return true;
+          window.open(url, '_top');
+          return true;
         } catch {
           /* ignore */
         }
         try {
           const a = document.createElement('a');
           a.href = url;
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
+          a.target = '_top';
+          a.rel = 'opener';
           a.style.display = 'none';
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
           return true;
         } catch {
+          /* ignore */
+        }
+        try {
+          window.top!.location.href = url;
+          return true;
+        } catch {
+          /* cross-origin top: fall back to navigating this frame */
+        }
+        try {
+          window.location.assign(url);
+          return true;
+        } catch {
           return false;
         }
       };
 
-      // Stub cannot drive the Coupa parent SPA from a cross-origin iframe (needs official client).
-      // Dev fallback: open the tenant URL in a new tab so the path is reachable without replacing the iframe.
+      // Stub: approximate official client by loading the tenant URL in the same tab (_top / iframe).
       if (embedded) {
         if (tenantDomain && typeof window !== 'undefined') {
           const url = `https://${tenantDomain}${normalizedPath}`;
-          if (tryOpenInNewTab(url)) {
+          if (navigateSameBrowserTab(url)) {
             return {
               status: 'success',
-              message: `Stub: opened ${url} in a new tab. For navigation inside the same Coupa window, replace this folder with the official BYOA client bundle from Coupa (not published on npm).`,
+              message: `Navigating ${url} in this tab (stub SDK; Coupa bundle uses host OAF APIs).`,
             };
           }
         }
@@ -95,15 +119,15 @@ export function initOAFInstance(config: any): OafApp {
             ? `https://${tenantDomain}${normalizedPath}`
             : '';
         console.warn(
-          '[OAF STUB] navigateToPath in iframe (popup blocked or missing/invalid coupahost):',
+          '[OAF STUB] navigateToPath in iframe (blocked or missing/invalid coupahost):',
           normalizedPath,
           hintUrl || '(no tenant URL)'
         );
         return {
           status: 'failure',
           message: hintUrl
-            ? `Stub: popup blocked — allow popups for this site, or open: ${hintUrl}. For in-window navigation, use Coupa's official OAF client (replace packages/@coupa/open-assistant-framework-client).`
-            : 'Stub: coupahost is missing (add ?coupahost=your-tenant.coupacloud.com or VITE_COUPA_DEFAULT_HOST), or use Coupa official OAF client for parent navigation.',
+            ? `Could not navigate to ${hintUrl}. Try again from a direct click, or install Coupa's OAF client in package2/packages/@coupa/open-assistant-framework-client.`
+            : 'Missing coupahost (?coupahost= or VITE_COUPA_DEFAULT_HOST), or install the Coupa OAF client package.',
         };
       }
       if (typeof window !== 'undefined') {

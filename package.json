@@ -6,14 +6,14 @@
   "scripts": {
     "postinstall": "npm run build:client",
     "dev": "vite",
-    "build:client": "npm --prefix packages/@coupa/open-assistant-framework-client run build",
+    "build:client": "npm --prefix package2/packages/@coupa/open-assistant-framework-client run build",
     "build": "npm run build:client && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "jest"
   },
   "dependencies": {
-    "@coupa/open-assistant-framework-client": "file:./packages/@coupa/open-assistant-framework-client",
+    "@coupa/open-assistant-framework-client": "file:./package2/packages/@coupa/open-assistant-framework-client",
     "@github/copilot": "^0.0.422",
     "@tailwindcss/vite": "^4.1.12",
     "react": "^19.1.1",
