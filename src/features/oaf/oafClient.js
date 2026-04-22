@@ -154,11 +154,63 @@ export const getUserContext = async () => {
 // Navigation
 // --------------------------------------------------
 
+/** Domain from config (no scheme, no path). */
+const coupaHostDomain = () =>
+  String(config.coupahost || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .split("/")[0]
+    .split(":")[0]
+    .toLowerCase();
+
+/**
+ * Normalize any reasonable navigation input into a single string for `navigateToPath`.
+ * Supports:
+ * - `/requisition_headers`, `requisition_headers`
+ * - `/invoices?status=pending`, `/foo#section` (query + hash kept)
+ * - `//host/path` (protocol-relative)
+ * - `https://<coupahost>/path?query#hash` → `/path?query#hash` when host matches tenant
+ * Returns "" if input is empty or a full URL whose host does not match `config.coupahost` (when coupahost is set).
+ */
 const normalizePath = (path) => {
   const p = (path || "").trim();
   if (!p) return "";
-  if (/^(https?:|\/\/|\/)/.test(p)) return p;
-  return `/${p}`;
+
+  const tenant = coupaHostDomain();
+
+  const fromAbsoluteUrl = (urlString) => {
+    try {
+      const u = new URL(urlString);
+      const host = u.hostname.toLowerCase();
+      if (tenant && host !== tenant) {
+        console.warn(
+          "[OAF] Navigation URL host does not match coupahost; use paths under your tenant:",
+          host,
+          "expected",
+          tenant
+        );
+        return "";
+      }
+      const out = `${u.pathname}${u.search}${u.hash}`;
+      if (!out || out === "/") return "/";
+      return out;
+    } catch {
+      return "";
+    }
+  };
+
+  if (/^https?:\/\//i.test(p)) {
+    return fromAbsoluteUrl(p);
+  }
+
+  if (p.startsWith("//")) {
+    return fromAbsoluteUrl(`https:${p}`);
+  }
+
+  // Fix accidental duplicate slashes: ///foo -> /foo
+  let rel = p.startsWith("/") ? p : `/${p}`;
+  rel = rel.replace(/\/{2,}/g, "/");
+  return rel;
 };
 
 /** True when this document is inside a parent frame (e.g. Coupa floating iframe). */
@@ -173,7 +225,11 @@ const isEmbeddedInParentFrame = () => {
 export const navigatePath = async (path) => {
   const normalized = normalizePath(path);
   if (!normalized) {
-    return { status: "failure", message: "Navigation path is empty" };
+    return {
+      status: "failure",
+      message:
+        "Navigation path is empty or the URL host does not match this app’s coupahost (use a path like /requisition_headers or a full URL on your Coupa tenant).",
+    };
   }
 
   const app = await getOafApp();
