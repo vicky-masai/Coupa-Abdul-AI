@@ -50,37 +50,64 @@ export function initOAFInstance(config: any): OafApp {
       } catch {
         embedded = true;
       }
+      const tenantDomain = String(config?.coupahost || '')
+        .replace(/^https?:\/\//i, '')
+        .replace(/\/+$/, '')
+        .split('/')[0];
+
+      const tryOpenInNewTab = (url: string): boolean => {
+        if (typeof window === 'undefined') return false;
+        try {
+          const w = window.open(url, '_blank', 'noopener,noreferrer');
+          if (w) return true;
+        } catch {
+          /* ignore */
+        }
+        try {
+          const a = document.createElement('a');
+          a.href = url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.style.display = 'none';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       // Stub cannot drive the Coupa parent SPA from a cross-origin iframe (needs official client).
       // Dev fallback: open the tenant URL in a new tab so the path is reachable without replacing the iframe.
       if (embedded) {
-        const domain = String(config?.coupahost || '')
-          .replace(/^https?:\/\//i, '')
-          .replace(/\/+$/, '');
-        if (domain && typeof window !== 'undefined') {
-          const url = `https://${domain}${normalizedPath}`;
-          const opened = window.open(url, '_blank', 'noopener,noreferrer');
-          if (opened) {
+        if (tenantDomain && typeof window !== 'undefined') {
+          const url = `https://${tenantDomain}${normalizedPath}`;
+          if (tryOpenInNewTab(url)) {
             return {
               status: 'success',
-              message: `Stub: opened ${url} in a new tab. For navigation inside the same Coupa window, replace this package with the official BYOA client from Coupa.`,
+              message: `Stub: opened ${url} in a new tab. For navigation inside the same Coupa window, replace this folder with the official BYOA client bundle from Coupa (not published on npm).`,
             };
           }
         }
+        const hintUrl =
+          tenantDomain && typeof window !== 'undefined'
+            ? `https://${tenantDomain}${normalizedPath}`
+            : '';
         console.warn(
-          '[OAF STUB] navigateToPath in iframe (popup blocked or missing coupahost):',
-          normalizedPath
+          '[OAF STUB] navigateToPath in iframe (popup blocked or missing/invalid coupahost):',
+          normalizedPath,
+          hintUrl || '(no tenant URL)'
         );
         return {
           status: 'failure',
-          message:
-            'Stub: could not open a new tab (allow popups) or coupahost is missing. Replace packages/@coupa/open-assistant-framework-client with the official Coupa BYOA client for real parent navigation.',
+          message: hintUrl
+            ? `Stub: popup blocked — allow popups for this site, or open: ${hintUrl}. For in-window navigation, use Coupa's official OAF client (replace packages/@coupa/open-assistant-framework-client).`
+            : 'Stub: coupahost is missing (add ?coupahost=your-tenant.coupacloud.com or VITE_COUPA_DEFAULT_HOST), or use Coupa official OAF client for parent navigation.',
         };
       }
       if (typeof window !== 'undefined') {
-        const domain = String(config?.coupahost || '')
-          .replace(/^https?:\/\//i, '')
-          .replace(/\/+$/, '');
-        const host = domain ? `https://${domain}` : 'https://ey-in-demo.coupacloud.com';
+        const host = tenantDomain ? `https://${tenantDomain}` : 'https://ey-in-demo.coupacloud.com';
         console.log('[OAF STUB] navigateToPath (top-level only):', normalizedPath);
         window.location.href = `${host}${normalizedPath}`;
       }

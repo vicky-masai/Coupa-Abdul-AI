@@ -13,28 +13,35 @@ const getParam = (...names) => {
   return null;
 };
 
+const stripHostValue = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+
 /**
  * Determine the Coupa host **domain** (no protocol).
- * - In PROD: prefer the URL param (?coupahost=ey-in-demo.coupacloud.com),
- *            else fall back to the DEFAULT_HOST but **strip protocol**.
- * - In DEV: use local bridge hostname (strip protocol).
+ * - Prefer `?coupahost=` from the URL in **all** environments (Coupa appends this when the BYOA
+ *   app runs in a floating iframe, including `npm run dev` against a local Vite server).
+ * - Then `VITE_COUPA_DEFAULT_HOST`, then `DEFAULT_HOST` from constants.
+ * - In dev only, if none of the above are set, fall back to the local bridge host (LOCALHOST).
  */
 const getCoupaHostDomain = () => {
+  const fromUrl = getParam(CONFIG_PROPS.URL_PARAMS.COUPA_HOST, "host");
+  if (fromUrl) return stripHostValue(fromUrl);
+
+  const fromVite = stripHostValue(VITE_COUPA_DEFAULT_HOST);
+  if (fromVite) return fromVite;
+
   if (!import.meta.env.PROD) {
-    // strip protocol if present
-    return (CONFIG_PROPS.HOST_URLS.LOCALHOST || "")
-      .replace(/^https?:\/\//i, "")
-      .replace(/\/+$/, "");
+    const localBridge = stripHostValue(CONFIG_PROPS.HOST_URLS.LOCALHOST || "");
+    if (localBridge) return localBridge;
   }
 
-  // coupa passes domain only: ey-in-demo.coupacloud.com
-  const fromUrl = getParam(CONFIG_PROPS.URL_PARAMS.COUPA_HOST, "host");
-  if (fromUrl) return fromUrl.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const fromConstants = stripHostValue(CONFIG_PROPS.HOST_URLS.DEFAULT_HOST);
+  if (fromConstants) return fromConstants;
 
-  // fallback tenant (domain only); `.env` override wins over oafConstants default
-  const defaultHost =
-    VITE_COUPA_DEFAULT_HOST || CONFIG_PROPS.HOST_URLS.DEFAULT_HOST || "";
-  return defaultHost.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  return "";
 };
 
 /**
