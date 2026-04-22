@@ -18,7 +18,13 @@ jest.mock('../../../src/features/oaf/oafClient', () => ({
   readForm: jest.fn(),
   writeForm: jest.fn(),
   subscribeToLocation: jest.fn(),
-  oafEvents: jest.fn(),
+  subscribeToEvents: jest.fn(),
+  getPageContext: jest.fn(),
+  getUserContext: jest.fn(),
+  getElementMeta: jest.fn(),
+  launchUiButtonClickProcess: jest.fn(),
+  ensureOafClient: jest.fn(() => Promise.resolve()),
+  getOafAppEventsSync: jest.fn(),
   moveAndResize: jest.fn(),
 }));
 
@@ -40,7 +46,8 @@ import {
   readForm,
   writeForm,
   subscribeToLocation,
-  oafEvents,
+  ensureOafClient,
+  getOafAppEventsSync,
 } from '../../../src/features/oaf/oafClient.js';
 
 import {
@@ -76,7 +83,8 @@ describe('useOaf', () => {
 
   beforeEach(() => {
     useContext.mockReturnValue(mockContext);
-    oafEvents.mockReturnValue(mockOafEvents);
+    getOafAppEventsSync.mockReturnValue(mockOafEvents);
+    ensureOafClient.mockResolvedValue(undefined);
     oafExecuteAction.mockImplementation(fn => fn());
     handleOAFResizeOperation.mockResolvedValue();
     jest.clearAllMocks();
@@ -118,11 +126,15 @@ describe('useOaf', () => {
     expect(typeof result.current.oafSubscribeToLocation).toBe('function');
   });
 
-  test('returns oafAppEvents object', () => {
+  test('returns oafAppEvents object', async () => {
     const { result } = renderHook(() => useOaf());
 
     expect(result.current.oafAppEvents).toBe(mockOafEvents);
-    expect(oafEvents).toHaveBeenCalled();
+    expect(getOafAppEventsSync).toHaveBeenCalled();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(ensureOafClient).toHaveBeenCalled();
   });
 
   describe('Layout Operations', () => {

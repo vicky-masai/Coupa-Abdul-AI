@@ -6,7 +6,8 @@ import { useOaf } from "../oaf/useOaf";
 import {
   getUserContext,
   getPageContext,
-  oafEvents,
+  ensureOafClient,
+  getOafAppEventsSync,
   setSize,
   moveAppToLocation,
 } from "../oaf/oafClient";
@@ -21,20 +22,30 @@ export default function OafNavigation() {
 
   // Subscribe to OAF host events (some builds emit errors/info via events)
   useEffect(() => {
-    const ev = oafEvents && typeof oafEvents === "function" ? oafEvents() : null;
+    let cancelled = false;
+    const evRef = { current: null };
     const handler = (evt) => {
       console.log("[OAF EVENT]", evt?.type || evt, evt);
       append(`[OAF EVENT] ${evt?.type || "message"} ${JSON.stringify(evt)}`);
     };
 
-    if (ev && ev.on) {
-      ev.on("error", handler);
-      ev.on("oafError", handler);
-      ev.on("message", handler);
-      ev.on("subscribedAttributeResponse", handler);
-    }
+    (async () => {
+      await ensureOafClient();
+      if (cancelled) return;
+      const ev = getOafAppEventsSync();
+      evRef.current = ev;
+      if (ev?.on) {
+        ev.on("error", handler);
+        ev.on("oafError", handler);
+        ev.on("message", handler);
+        ev.on("subscribedAttributeResponse", handler);
+      }
+    })();
+
     return () => {
-      if (ev && ev.off) {
+      cancelled = true;
+      const ev = evRef.current;
+      if (ev?.off) {
         ev.off("error", handler);
         ev.off("oafError", handler);
         ev.off("message", handler);

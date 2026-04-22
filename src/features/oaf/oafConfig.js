@@ -1,5 +1,6 @@
 // src/features/oaf/oafConfig.js
 import { CONFIG_PROPS } from "./oafConstants";
+import { VITE_OAF_APP_ID, VITE_COUPA_DEFAULT_HOST } from "./viteEnv.js";
 
 // Parse current URL params (Coupa app appends these when launching the floating iFrame)
 const urlParams = new URLSearchParams(window.location.search);
@@ -30,10 +31,10 @@ const getCoupaHostDomain = () => {
   const fromUrl = getParam(CONFIG_PROPS.URL_PARAMS.COUPA_HOST, "host");
   if (fromUrl) return fromUrl.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 
-  // fallback to your tenant default but as **domain only**
-  return (CONFIG_PROPS.HOST_URLS.DEFAULT_HOST || "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/\/+$/, "");
+  // fallback tenant (domain only); `.env` override wins over oafConstants default
+  const defaultHost =
+    VITE_COUPA_DEFAULT_HOST || CONFIG_PROPS.HOST_URLS.DEFAULT_HOST || "";
+  return defaultHost.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
 };
 
 /**
@@ -63,9 +64,10 @@ const getIframeId = () => {
  * NOTE: coupahost is now **domain only** (no https://).
  */
 const config = {
-  appId: "1234567890",         // Your Coupa iFrame "Client ID" (must match exactly)
-  coupahost: getCoupaHostDomain(), // <-- domain only, e.g., "ey-in-demo.coupacloud.com"
-  iframeId: getIframeId(),     // From URL
+  // Floating iframe Client ID from Coupa (see README); `.env` wins over oafConstants
+  appId: VITE_OAF_APP_ID || CONFIG_PROPS.APP_ID,
+  coupahost: getCoupaHostDomain(), // domain only, e.g. "ey-in-demo.coupacloud.com"
+  iframeId: getIframeId(),
 };
 
 const validateConfig = (cfg) => {

@@ -1,10 +1,17 @@
 // Minimal stub implementation of the Open Assistant Framework client API.
 // This file exists so that the package can be built and consumed by the demo app.
 
+const stubEventEmitter = {
+  on: (_event: string, _handler: (...args: unknown[]) => void) => {},
+  off: (_event: string, _handler: (...args: unknown[]) => void) => {},
+  emit: (_event?: string, _payload?: unknown) => {},
+};
+
 export interface OafApp {
   setSize?: (opts: {height: number; width: number}) => Promise<any>;
   moveToLocation?: (opts: {top: number; left: number; resetToDock?: boolean}) => Promise<any>;
   getPageContext?: () => Promise<any>;
+  getUserContext?: () => Promise<any>;
   navigateToPath?: (path: string) => Promise<any>;
   enterprise?: {
     openEasyForm?: (formId: string) => Promise<any>;
@@ -30,6 +37,11 @@ export function initOAFInstance(config: any): OafApp {
     setSize: noop,
     moveToLocation: noop,
     getPageContext: async () => ({}),
+    getUserContext: async () => ({
+      status: 'success',
+      data: { user: null },
+      message: 'Stub user context (run inside Coupa for real user)',
+    }),
     navigateToPath: async (path: string) => {
       console.log('[OAF STUB] navigateToPath called with:', path);
       if (typeof window !== 'undefined') {
@@ -47,7 +59,7 @@ export function initOAFInstance(config: any): OafApp {
     writeForm: noop,
     listenToDataLocation: noop,
     listenToOafEvents: noop,
-    events: {},
+    events: stubEventEmitter,
     getElementMeta: async () => ({}),
   };
 }

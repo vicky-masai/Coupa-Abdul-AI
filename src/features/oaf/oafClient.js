@@ -13,6 +13,24 @@ import config from "./oafConfig";
 let oafApp = null;
 let loadAttempted = false;
 
+const noopEmitter = {
+  on: () => {},
+  off: () => {},
+  emit: () => {},
+};
+
+const resolveEventsEmitter = (app) => {
+  const ev = app?.events;
+  return ev &&
+    typeof ev.on === "function" &&
+    typeof ev.off === "function"
+    ? ev
+    : noopEmitter;
+};
+
+/** Updated whenever `getOafApp()` finishes (success or stub). */
+let cachedEventsEmitter = noopEmitter;
+
 async function getOafApp() {
   if (oafApp || loadAttempted) return oafApp;
   loadAttempted = true;
@@ -22,12 +40,24 @@ async function getOafApp() {
       "@coupa/open-assistant-framework-client"
     );
     oafApp = initOAFInstance(config);
+    cachedEventsEmitter = resolveEventsEmitter(oafApp);
   } catch (_err) {
     // Expected outside Coupa
     oafApp = null;
+    cachedEventsEmitter = noopEmitter;
   }
 
   return oafApp;
+}
+
+/** Await once so the SDK (or stub) is initialized; safe to call multiple times. */
+export async function ensureOafClient() {
+  return getOafApp();
+}
+
+/** Event emitter from the last successful init; use after `ensureOafClient()`. */
+export function getOafAppEventsSync() {
+  return cachedEventsEmitter;
 }
 
 // --------------------------------------------------
@@ -38,12 +68,6 @@ const failure = (op) => ({
   status: "failure",
   message: `OAF is not available (${op}). Open the app inside Coupa.`,
 });
-
-const noopEmitter = {
-  on: () => {},
-  off: () => {},
-  emit: () => {},
-};
 
 // --------------------------------------------------
 // Window & Layout APIs
@@ -112,6 +136,14 @@ export const getUserContext = async () => {
       status: "success",
       data: { user: null },
       message: "Standalone fallback user context",
+    };
+  }
+
+  if (typeof app.getUserContext !== "function") {
+    return {
+      status: "success",
+      data: { user: null },
+      message: "getUserContext is not available on this OAF runtime",
     };
   }
 
@@ -200,7 +232,7 @@ export const subscribeToEvents = async (subscriptionData) => {
 
 export const oafEvents = async () => {
   const app = await getOafApp();
-  return app?.events || noopEmitter;
+  return resolveEventsEmitter(app);
 };
 
 export const getElementMeta = async (formStructure) => {

@@ -1,5 +1,5 @@
 // src/features/oaf/useOaf.js
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { OafContext } from "./OafContext";
 import {
   navigatePath,
@@ -8,10 +8,12 @@ import {
   writeForm,
   subscribeToLocation,
   subscribeToEvents,
-  oafEvents,
   getPageContext,
+  getUserContext,
   getElementMeta,
   launchUiButtonClickProcess,
+  ensureOafClient,
+  getOafAppEventsSync,
 } from "./oafClient";
 import {
   closeCalculator,
@@ -28,15 +30,6 @@ import {
   LAYOUT_STATES,
   ERROR_MESSAGES,
 } from "./oafConstants";
-
-/**
- * Tiny safe no-op event emitter so .on/.off/.emit exist in standalone mode
- */
-const createNoopEmitter = () => ({
-  on: () => {},
-  off: () => {},
-  emit: () => {},
-});
 
 /**
  * Custom React hook for interacting with OAF (Open Application Framework).
@@ -231,6 +224,13 @@ export const useOaf = () => {
   };
 
   /**
+   * Get the signed-in Coupa user context (requires running inside Coupa with permission).
+   */
+  const oafGetUserContext = async () => {
+    return oafExecuteAction(() => getUserContext());
+  };
+
+  /**
    * Get metadata from a form or element using OAF
    * @param {object} formStructure - The form structure data
    * @returns {Promise<object>} The metadata response
@@ -248,12 +248,19 @@ export const useOaf = () => {
     return oafExecuteAction(() => launchUiButtonClickProcess(processId));
   };
 
-  // Get OAF app events (observable/event emitter), with a safe fallback for standalone mode
-  const rawEvents = oafEvents && typeof oafEvents === "function" ? oafEvents() : null;
-  const oafAppEvents =
-    rawEvents && typeof rawEvents.on === "function" && typeof rawEvents.off === "function"
-      ? rawEvents
-      : createNoopEmitter();
+  // OAF `events` emitter is created when the SDK loads; prime client then read cached emitter.
+  const [oafAppEvents, setOafAppEvents] = useState(() => getOafAppEventsSync());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await ensureOafClient();
+      if (!cancelled) setOafAppEvents(getOafAppEventsSync());
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Return state and all app actions
   return {
@@ -276,6 +283,7 @@ export const useOaf = () => {
     oafSubscribeToLocation,
     oafSubscribeToEvents,
     oafGetPageContext,
+    oafGetUserContext,
     oafGetElementMeta,
     oafLaunchUiButtonClickProcess,
   };

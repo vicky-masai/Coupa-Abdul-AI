@@ -14,23 +14,25 @@ import {
 const pickMessage = (resp) => {
   if (!resp) return null;
 
-  // 1) direct message
-  if (resp.message && typeof resp.message === "string") return resp.message;
-
-  // 2) standard error object
-  if (resp.error && typeof resp.error?.message === "string") return resp.error.message;
-
-  // 3) Coupa aggregated errors
+  // 1) Coupa aggregated errors (prefer over generic `message` when both exist)
   if (Array.isArray(resp.error_data) && resp.error_data.length > 0) {
     return resp.error_data
-      .map((e) => `${e?.error_key || STATUSES.ERROR} : ${e?.error_attribute || e?.error_message || "Unknown"}`)
+      .map(
+        (e) =>
+          `${e?.error_key || STATUSES.ERROR} : ${e?.error_attribute || e?.error_message || "Unknown"}`
+      )
       .join("\n");
   }
+
+  // 2) direct message
+  if (resp.message && typeof resp.message === "string") return resp.message;
+
+  // 3) standard error object
+  if (resp.error && typeof resp.error?.message === "string") return resp.error.message;
 
   // 4) rawError/exception
   if (resp.rawError && typeof resp.rawError?.message === "string") return resp.rawError.message;
 
-  // 5) generic
   return null;
 };
 
@@ -233,7 +235,12 @@ const oafExecuteAction = async (action) => {
       };
     }
 
-    const status = resp.status || (resp.success ? STATUSES.SUCCESS : STATUSES.ERROR);
+    const status =
+      resp.status !== undefined && resp.status !== null && resp.status !== ""
+        ? resp.status
+        : resp.success
+          ? STATUSES.SUCCESS
+          : STATUSES.ERROR;
     const message =
       pickMessage(resp) ||
       (status === STATUSES.SUCCESS ? SUCCESS_MESSAGES.GENERIC : ERROR_MESSAGES.UNKNOWN);
@@ -247,10 +254,10 @@ const oafExecuteAction = async (action) => {
       };
     }
 
-    // Treat everything else as error/failure
+    // Non-success: preserve host-reported status (e.g. custom values), not only `failure`
     return {
       message,
-      status: STATUSES.ERROR,
+      status,
       error_action: resp.action,
       error_data: resp.error_data,
       rawResponse: resp,

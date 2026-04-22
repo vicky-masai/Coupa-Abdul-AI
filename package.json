@@ -4,6 +4,7 @@
   "version": "0.0.3",
   "type": "module",
   "scripts": {
+    "postinstall": "npm run build:client",
     "dev": "vite",
     "build:client": "npm --prefix packages/@coupa/open-assistant-framework-client run build",
     "prebuild": "npm run build:client",

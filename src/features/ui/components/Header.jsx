@@ -2,14 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import EllipsesIcon from "../icons/EllipsesIcon";
 import CrossIcon from "../icons/CrossIcon";
 import { useOaf } from "../../oaf/useOaf";
+import { VITE_APP_TITLE } from "../../oaf/viteEnv.js";
 import { EVENT_TYPES, LABELS, STYLES } from "../constants";
 
 const { MENU_ITEM_CLASSES } = STYLES;
 
-// Prefer an environment variable so you can change branding without code changes.
-// If not set, default to "Abdul AI Agent".
+// Prefer `VITE_APP_TITLE` in `.env`; otherwise constants / default.
 const TITLE =
-  import.meta?.env?.VITE_APP_TITLE?.trim?.() ||
+  VITE_APP_TITLE ||
   LABELS?.APP_TITLE?.trim?.() ||
   "Abdul AI Agent";
 

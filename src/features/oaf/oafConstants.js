@@ -13,7 +13,9 @@
  * @typedef {Object}
  */
 export const CONFIG_PROPS = {
-  /** Default/fallback application identifier (real one is forced in oafConfig.js) */
+  /**
+   * Default iframe Client ID; overridden by `VITE_OAF_APP_ID` in `oafConfig.js` (see `.env.example`).
+   */
   APP_ID: "1234567890",
 
   HOST_URLS: {
@@ -27,8 +29,8 @@ export const CONFIG_PROPS = {
     HTTPS_PROTOCOL: "https://",
 
     /**
-     * Safe default Coupa host when none is provided via URL or environment.
-     * Your tenant: ey-in-demo.coupacloud.com
+     * Default tenant when no `?coupahost=` is present (production).
+     * Override with `VITE_COUPA_DEFAULT_HOST` in `.env` (handled in `oafConfig.js`).
      */
     DEFAULT_HOST: "https://ey-in-demo.coupacloud.com",
   },
