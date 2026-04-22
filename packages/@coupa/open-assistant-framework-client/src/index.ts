@@ -50,17 +50,30 @@ export function initOAFInstance(config: any): OafApp {
       } catch {
         embedded = true;
       }
-      // Never assign window.location inside Coupa's iframe: it only replaces the iframe and
-      // does not drive the parent SPA. Parent navigation requires Coupa's real OAF client.
+      // Stub cannot drive the Coupa parent SPA from a cross-origin iframe (needs official client).
+      // Dev fallback: open the tenant URL in a new tab so the path is reachable without replacing the iframe.
       if (embedded) {
+        const domain = String(config?.coupahost || '')
+          .replace(/^https?:\/\//i, '')
+          .replace(/\/+$/, '');
+        if (domain && typeof window !== 'undefined') {
+          const url = `https://${domain}${normalizedPath}`;
+          const opened = window.open(url, '_blank', 'noopener,noreferrer');
+          if (opened) {
+            return {
+              status: 'success',
+              message: `Stub: opened ${url} in a new tab. For navigation inside the same Coupa window, replace this package with the official BYOA client from Coupa.`,
+            };
+          }
+        }
         console.warn(
-          '[OAF STUB] navigateToPath skipped in iframe (parent nav needs official Coupa client):',
+          '[OAF STUB] navigateToPath in iframe (popup blocked or missing coupahost):',
           normalizedPath
         );
         return {
           status: 'failure',
           message:
-            'Local stub cannot navigate the Coupa parent. Replace packages/@coupa/open-assistant-framework-client with the official artifact from your Coupa BYOA bundle.',
+            'Stub: could not open a new tab (allow popups) or coupahost is missing. Replace packages/@coupa/open-assistant-framework-client with the official Coupa BYOA client for real parent navigation.',
         };
       }
       if (typeof window !== 'undefined') {
