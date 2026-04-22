@@ -68,38 +68,64 @@ export function initOAFInstance(config: any): OafApp {
         .split('/')[0];
 
       /**
-       * Without Coupa's real OAF client, `window.open(url, '_top')` usually does nothing in a
-       * cross-origin iframe but does not throw — so we must not treat it as success.
-       * Reliable stub behavior: navigate THIS frame to the tenant URL (iframe shows Coupa;
-       * the browser address bar may still show the parent page when embedded).
+       * Do NOT load the full Coupa SPA inside the BYOA iframe (`location.assign` on self):
+       * that often triggers frame-busting / extra windows ("popup") or a broken mini view.
+       * Prefer navigating the top Coupa window via GET form + `_top` / `_parent`, then
+       * `window.open(..., '_top')`. Works best when called synchronously from a user click;
+       * after `await` in React it may be ignored — use Coupa's real OAF client for production.
        */
       const navigateEmbeddedStub = (url: string): boolean => {
-        if (typeof window === 'undefined') return false;
+        if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+
+        const submitTo = (target: '_top' | '_parent'): boolean => {
+          try {
+            const form = document.createElement('form');
+            form.method = 'get';
+            form.action = url;
+            form.target = target;
+            form.style.cssText = 'display:none!important';
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+
         try {
           const topWin = window.top;
-          if (topWin && topWin !== window) {
-            topWin.location.href = url;
-            return true;
+          if (topWin && topWin !== window.self) {
+            try {
+              topWin.location.href = url;
+              return true;
+            } catch {
+              /* cross-origin: cannot set top.location */
+            }
           }
         } catch {
-          /* cross-origin: cannot drive parent URL */
+          /* ignore */
         }
+
+        if (submitTo('_top')) return true;
+        if (submitTo('_parent')) return true;
+
         try {
-          window.location.assign(url);
+          window.open(url, '_top');
           return true;
         } catch {
           return false;
         }
       };
 
-      // Stub: load tenant URL in this frame (or top if same-origin).
+      // Stub: ask top/parent window to navigate (avoid loading Coupa inside the BYOA iframe).
       if (embedded) {
         if (tenantDomain && typeof window !== 'undefined') {
           const url = `https://${tenantDomain}${normalizedPath}`;
           if (navigateEmbeddedStub(url)) {
             return {
               status: 'success',
-              message: `Loading ${url} in this frame (stub). Parent URL only changes if top is same-origin, or use Coupa's OAF client for in-host navigation.`,
+              message: `Requested top-level navigation to ${url} (stub). If the main Coupa page does not change, install Coupa's OAF client or trigger navigate from a direct button click (no await before this call).`,
             };
           }
         }
