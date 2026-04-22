@@ -125,7 +125,7 @@ export function initOAFInstance(config: any): OafApp {
           if (navigateEmbeddedStub(url)) {
             return {
               status: 'success',
-              message: `Requested top-level navigation to ${url} (stub). If the main Coupa page does not change, install Coupa's OAF client or trigger navigate from a direct button click (no await before this call).`,
+              message: `Stub: ${normalizedPath} (parent routing needs Coupa OAF client in package2/packages/@coupa/open-assistant-framework-client).`,
             };
           }
         }
@@ -141,8 +141,8 @@ export function initOAFInstance(config: any): OafApp {
         return {
           status: 'failure',
           message: hintUrl
-            ? `Could not navigate to ${hintUrl}. Try again from a direct click, or install Coupa's OAF client in package2/packages/@coupa/open-assistant-framework-client.`
-            : 'Missing coupahost (?coupahost= or VITE_COUPA_DEFAULT_HOST), or install the Coupa OAF client package.',
+            ? `Stub: could not navigate to ${hintUrl}. Add Coupa OAF client or check coupahost.`
+            : 'Stub: missing coupahost (?coupahost= or VITE_COUPA_DEFAULT_HOST).',
         };
       }
       if (typeof window !== 'undefined') {
